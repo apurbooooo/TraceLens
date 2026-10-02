@@ -49,7 +49,7 @@ npm run icons
 | @vitejs/plugin-basic-ssl | HTTPS for local dev |
 | Lucide React | Icons |
 
-**Browser APIs used**: `getUserMedia`, Screen Wake Lock, Fullscreen API, ResizeObserver, OffscreenCanvas, `createImageBitmap`
+**Browser APIs used**: `getUserMedia`, `MediaStreamTrack.getCapabilities()` / `applyConstraints()`, Canvas 2D, Screen Wake Lock, Fullscreen API, ResizeObserver, OffscreenCanvas, `createImageBitmap`
 
 ---
 
@@ -63,6 +63,7 @@ npm run icons
 CSS compositing
   ↓
 <img displayUrl>  ← CSS transform + CSS filter (GPU compositor)
+     └─ Sketch: cached local Canvas result from the reference image only
 ```
 
 Video frames **never enter React state**. React manages only: navigation, camera status, image metadata, transform values, adjustment values, lock state.
@@ -82,7 +83,8 @@ The original `File` is kept for future export/reprocessing but never rendered di
 
 ### State management
 
-- **Zustand store**: navigation, camera, image metadata, transform, adjustments, lock, UI panels, wake lock indicator
+- **Zustand store**: navigation, camera, image metadata and appearance mode, transform, adjustments, lock, UI panels, wake lock indicator
+- **useCamera state/refs**: active track torch and stabilization capability/status; no camera frames enter React state
 - **useRef**: video element, container size, gesture snapshots, abort controllers, wake lock sentinel
 - **CSS only**: all visual transforms (translate, scale, rotate, flip) and filters (brightness, contrast, etc.)
 
@@ -115,23 +117,42 @@ The original `File` is kept for future export/reprocessing but never rendered di
 | Camera lifecycle: visibility change (screen off → re-enable tracks) | ✅ |
 | PWA: installable, service worker, offline shell | ✅ |
 
----
-
-## Not Yet Implemented (Phase 2+)
+## Phase 2A — Tracing Controls (Implemented)
 
 | Feature | Phase |
 |---|---|
-| B&W / outline / edge detection modes | Phase 2 |
-| Canvas-based image processing | Phase 2 |
-| Web Worker for processing | Phase 2 |
-| Threshold slider | Phase 2 |
-| Sharpness control | Phase 2 |
+| B&W reference toggle (CSS grayscale; camera frames untouched) | Phase 2A |
+| Local pencil-style sketch processing, cached per reference image | Phase 2A |
+| Rear-camera flashlight using the camera torch capability when supported | Phase 2A |
+| Best-effort steady camera view when an explicit stabilization capability is exposed | Phase 2A |
+| Tracing controls in the existing camera toolbar | Phase 2A |
+
+Sketch generation runs on the uploaded reference only. Its pixel work yields between short row groups, keeps the reference aspect ratio, and reuses the local result when Sketch is toggled again. The original uploaded image and its transform remain unchanged.
+
+Sketch mode is local reference-image sketch processing. Its result preserves the uploaded reference's alpha, opacity, transform, and aspect ratio.
+
+The Stabilizer control is disabled when the active camera track does not report a usable stabilization capability. It does not claim universal access to optical or electronic stabilization and does not analyze camera frames.
+
+---
+
+## Not Yet Implemented (Phase 2B+)
+
+| Feature | Phase |
+|---|---|
+| Ghost / high-contrast presets | Phase 2B |
+| Additional outline and edge-detection modes | Phase 2B |
+| Threshold slider | Phase 2B |
+| Sharpness control | Phase 2B |
 | Adaptive FPS (30/60) | Phase 3 |
 | Device capability detection | Phase 3 |
 | Battery Saver / Balanced / High Quality modes | Phase 3 |
 | IndexedDB for recent images + settings | Phase 4 |
 | Paper/document detection | Phase 6 |
 | Perspective transform / AR stabilization | Phase 6 |
+
+**Flashlight compatibility**: Uses the active rear camera's reported torch capability and applies constraints without restarting the stream. Unsupported devices and front cameras expose a disabled control. A failed constraint leaves the camera running and disables the control for that stream.
+
+**Steady view compatibility**: Best-effort steady/stabilized camera viewing depending on browser/device capabilities. The control is available only when the active track explicitly reports a stabilization constraint that can be enabled and disabled. There is no continuous computer-vision fallback in this phase.
 
 ---
 
@@ -158,4 +179,4 @@ npm run dev:host
 npm run build    # TypeScript check + production build
 ```
 
-Expected output: zero errors, ~259KB JS gzipped to ~81KB.
+Current production output: 273.04KB JavaScript (85.04KB gzip) and 20.55KB CSS (4.99KB gzip), plus the PWA service worker and precache assets. Bundle sizes can vary with dependency versions.

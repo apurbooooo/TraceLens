@@ -9,7 +9,8 @@ import { BottomSheet } from '../../components/BottomSheet';
  * All adjustments here are implemented via CSS filters (fast path).
  * No canvas processing, no worker needed for these controls.
  *
- * Phase 2 will add canvas-based modes: B&W threshold, outline, edge detection.
+ * B&W and Sketch are quick tracing modes in the camera toolbar. Additional
+ * threshold, outline, and edge controls remain future image-processing work.
  */
 export const AdjustPanel: React.FC = () => {
   const showAdjustPanel = useAppStore((s) => s.showAdjustPanel);

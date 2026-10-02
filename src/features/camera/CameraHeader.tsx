@@ -5,6 +5,7 @@ import { IconButton } from '../../components/IconButton';
 import { useImageUpload } from '../image/useImageUpload';
 import type { UploadedImage } from '../../types';
 import { DEFAULT_TRANSFORM } from '../../types';
+import { releaseSketchImage } from '../image-processing/useSketchImage';
 
 interface CameraHeaderProps {
   isFullscreen: boolean;
@@ -15,6 +16,7 @@ interface CameraHeaderProps {
 /** Revoke displayUrl of a previous image to free object URL memory */
 function revokeUploadedImage(image: UploadedImage): void {
   URL.revokeObjectURL(image.displayUrl);
+  releaseSketchImage(image.id);
 }
 
 /**

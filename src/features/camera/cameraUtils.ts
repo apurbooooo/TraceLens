@@ -158,6 +158,86 @@ export function stopCamera(
   if (videoElement?.srcObject === stream) videoElement.srcObject = null;
 }
 
+/** Returns true only when the active camera track explicitly exposes torch support. */
+export function supportsTorch(track: MediaStreamTrack | null): boolean {
+  const capabilities = getTrackCapabilities(track);
+  if (!capabilities) return false;
+  const torch = capabilities.torch;
+  return torch === true || (Array.isArray(torch) && torch.includes(true));
+}
+
+/** Apply a torch constraint without restarting the camera stream. */
+export async function applyTorch(
+  track: MediaStreamTrack,
+  enabled: boolean
+): Promise<void> {
+  const advanced = [{ torch: enabled }] as unknown as MediaTrackConstraintSet[];
+  await track.applyConstraints({ advanced });
+}
+
+export interface StabilizationControl {
+  key: 'videoStabilization' | 'imageStabilization' | 'stabilizationMode';
+  enabledValue: boolean | string;
+  disabledValue: boolean | string;
+}
+
+/**
+ * Read only explicit stabilization capabilities reported by this track.
+ * These names are not part of the broadly implemented camera capability set,
+ * so the feature remains unavailable unless a browser reports them directly.
+ */
+export function getStabilizationControl(
+  track: MediaStreamTrack | null
+): StabilizationControl | null {
+  const capabilities = getTrackCapabilities(track);
+  if (!capabilities) return null;
+
+  for (const key of ['videoStabilization', 'imageStabilization'] as const) {
+    const values = capabilities[key];
+    if (values === true) {
+      return { key, enabledValue: true, disabledValue: false };
+    }
+    if (Array.isArray(values) && values.includes(true)) {
+      return { key, enabledValue: true, disabledValue: false };
+    }
+  }
+
+  const modes = capabilities.stabilizationMode;
+  if (!Array.isArray(modes) || !modes.every((mode) => typeof mode === 'string')) return null;
+  const normalizedModes = modes.map((mode) => String(mode).toLowerCase());
+  const disabledIndex = normalizedModes.findIndex((mode) => ['off', 'none', 'disabled'].includes(mode));
+  const enabledIndex = normalizedModes.findIndex((mode) =>
+    ['standard', 'on', 'auto', 'continuous', 'enabled'].includes(mode)
+  );
+  if (disabledIndex < 0 || enabledIndex < 0) return null;
+
+  return {
+    key: 'stabilizationMode',
+    enabledValue: String(modes[enabledIndex]),
+    disabledValue: String(modes[disabledIndex]),
+  };
+}
+
+/** Apply a stabilization mode previously reported by the active camera track. */
+export async function applyStabilization(
+  track: MediaStreamTrack,
+  control: StabilizationControl,
+  enabled: boolean
+): Promise<void> {
+  const value = enabled ? control.enabledValue : control.disabledValue;
+  const advanced = [{ [control.key]: value }] as unknown as MediaTrackConstraintSet[];
+  await track.applyConstraints({ advanced });
+}
+
+function getTrackCapabilities(track: MediaStreamTrack | null): Record<string, unknown> | null {
+  if (!track || typeof track.getCapabilities !== 'function') return null;
+  try {
+    return track.getCapabilities() as unknown as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export function parseCameraError(error: unknown): CameraError {
   if (isCameraError(error)) return error;
 

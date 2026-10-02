@@ -1,5 +1,8 @@
 import React, { useCallback } from 'react';
 import {
+  Contrast,
+  Flashlight,
+  Focus,
   FlipHorizontal,
   FlipVertical,
   Lock,
@@ -8,16 +11,111 @@ import {
   SlidersHorizontal,
   Maximize,
   RefreshCw,
+  WandSparkles,
 } from 'lucide-react';
 import { useAppStore } from '../../app/store';
 import { IconButton } from '../../components/IconButton';
 import { Slider } from '../../components/Slider';
 import { computeFitTransform } from '../../lib/imageUtils';
 
+interface QuickControlsProps {
+  torchSupported: boolean;
+  torchEnabled: boolean;
+  torchBusy: boolean;
+  onToggleTorch: () => void;
+  stabilizerSupported: boolean;
+  stabilizerEnabled: boolean;
+  stabilizerBusy: boolean;
+  onToggleStabilizer: () => void;
+}
+
 interface OverlayToolbarProps {
   containerWidth: number;
   containerHeight: number;
 }
+
+export const QuickControls: React.FC<QuickControlsProps> = ({
+  torchSupported,
+  torchEnabled,
+  torchBusy,
+  onToggleTorch,
+  stabilizerSupported,
+  stabilizerEnabled,
+  stabilizerBusy,
+  onToggleStabilizer,
+}) => {
+  const referenceMode = useAppStore((s) => s.referenceMode);
+  const setReferenceMode = useAppStore((s) => s.setReferenceMode);
+  const uploadedImage = useAppStore((s) => s.uploadedImage);
+  const cameraFacing = useAppStore((s) => s.cameraFacing);
+
+  const hasImage = !!uploadedImage;
+  const flashlightAvailable = cameraFacing === 'environment' && torchSupported;
+  const flashlightUnavailableTitle = cameraFacing === 'user'
+    ? 'Flashlight is available only on the rear camera when its torch is supported.'
+    : 'Flashlight not supported on this device/browser.';
+  const stabilizerTitle = stabilizerSupported
+    ? (stabilizerEnabled ? 'Turn stabilizer off' : 'Turn stabilizer on')
+    : 'Stabilizer not supported on this device/browser camera.';
+
+  const handleToggleBlackAndWhite = useCallback(() => {
+    setReferenceMode(referenceMode === 'bw' ? 'normal' : 'bw');
+  }, [referenceMode, setReferenceMode]);
+
+  const handleToggleSketch = useCallback(() => {
+    setReferenceMode(referenceMode === 'sketch' ? 'normal' : 'sketch');
+  }, [referenceMode, setReferenceMode]);
+
+  return (
+    <div className="quick-controls" role="group" aria-label="Quick tracing controls">
+      <ToolbarFeatureButton
+        icon={<Contrast size={16} />}
+        label="B&W"
+        accessibleLabel="Black & White"
+        active={referenceMode === 'bw'}
+        disabled={!hasImage}
+        title={hasImage ? 'Black & White reference image' : 'Upload a reference image first.'}
+        onClick={handleToggleBlackAndWhite}
+      />
+      <ToolbarFeatureButton
+        icon={<WandSparkles size={16} />}
+        label="Sketch"
+        active={referenceMode === 'sketch'}
+        disabled={!hasImage}
+        title={hasImage ? 'Local pencil sketch of the reference image' : 'Upload a reference image first.'}
+        onClick={handleToggleSketch}
+      />
+      <ToolbarFeatureButton
+        icon={<Flashlight size={16} />}
+        label="Flash"
+        accessibleLabel={
+          flashlightAvailable
+            ? torchEnabled ? 'Turn flashlight off' : 'Turn flashlight on'
+            : 'Flashlight not supported on this device/browser'
+        }
+        active={torchEnabled}
+        disabled={!flashlightAvailable || torchBusy}
+        busy={torchBusy}
+        title={flashlightAvailable ? undefined : flashlightUnavailableTitle}
+        onClick={onToggleTorch}
+      />
+      <ToolbarFeatureButton
+        icon={<Focus size={16} />}
+        label="Steady"
+        accessibleLabel={
+          stabilizerSupported
+            ? stabilizerEnabled ? 'Turn stabilizer off' : 'Turn stabilizer on'
+            : 'Stabilizer not supported on this device/browser'
+        }
+        active={stabilizerEnabled}
+        disabled={!stabilizerSupported || stabilizerBusy}
+        busy={stabilizerBusy}
+        title={stabilizerTitle}
+        onClick={onToggleStabilizer}
+      />
+    </div>
+  );
+};
 
 /**
  * OverlayToolbar — primary control row at the bottom of the camera view.
@@ -89,13 +187,15 @@ export const OverlayToolbar: React.FC<OverlayToolbarProps> = ({
 
   return (
     <div
-      className="flex flex-col gap-3 px-4 py-3"
+      className="flex flex-col gap-2 px-4 py-2"
       style={{
         background: 'rgba(10,10,10,0.88)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         borderTop: '1px solid rgba(255,255,255,0.07)',
-        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+        paddingLeft: 'calc(env(safe-area-inset-left, 0px) + 12px)',
+        paddingRight: 'calc(env(safe-area-inset-right, 0px) + 12px)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)',
       }}
     >
       {/* Opacity slider */}
@@ -178,3 +278,47 @@ export const OverlayToolbar: React.FC<OverlayToolbarProps> = ({
     </div>
   );
 };
+
+interface ToolbarFeatureButtonProps {
+  icon: React.ReactNode;
+  label: string;
+  accessibleLabel?: string;
+  active: boolean;
+  disabled?: boolean;
+  busy?: boolean;
+  title?: string;
+  onClick: () => void;
+}
+
+const ToolbarFeatureButton: React.FC<ToolbarFeatureButtonProps> = ({
+  icon,
+  label,
+  accessibleLabel = label,
+  active,
+  disabled = false,
+  busy = false,
+  title,
+  onClick,
+}) => (
+  <button
+    type="button"
+    aria-label={accessibleLabel}
+    aria-pressed={active}
+    aria-busy={busy || undefined}
+    title={title}
+    disabled={disabled}
+    onClick={onClick}
+    className="quick-control"
+    style={{
+      background: active ? 'rgba(59,130,246,0.24)' : 'rgba(255,255,255,0.035)',
+      borderColor: active ? 'rgba(59,130,246,0.45)' : 'rgba(255,255,255,0.06)',
+      color: active ? '#bfdbfe' : 'rgba(240,240,240,0.72)',
+      opacity: disabled ? 0.42 : 1,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      WebkitTapHighlightColor: 'transparent',
+    }}
+  >
+    <span className="flex items-center justify-center" aria-hidden="true">{icon}</span>
+    <span>{label}</span>
+  </button>
+);

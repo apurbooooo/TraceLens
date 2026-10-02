@@ -5,7 +5,7 @@ import { useWakeLock } from '../pwa/useWakeLock';
 import { CameraErrorView } from './CameraErrorView';
 import { CameraHeader } from './CameraHeader';
 import { OverlayImage } from '../overlay/OverlayImage';
-import { OverlayToolbar } from '../overlay/OverlayToolbar';
+import { OverlayToolbar, QuickControls } from '../overlay/OverlayToolbar';
 import { AdjustPanel } from '../adjustments/AdjustPanel';
 import { computeInitialFitTransform } from '../../lib/imageUtils';
 
@@ -42,7 +42,17 @@ export const CameraScreen: React.FC = () => {
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const { restart } = useCamera(videoRef);
+  const {
+    restart,
+    torchSupported,
+    torchEnabled,
+    torchBusy,
+    toggleTorch,
+    stabilizerSupported,
+    stabilizerEnabled,
+    stabilizerBusy,
+    toggleStabilizer,
+  } = useCamera(videoRef);
   const { requestWakeLock, releaseWakeLock } = useWakeLock();
   const fullscreenSupported =
     typeof document !== 'undefined' &&
@@ -138,10 +148,22 @@ export const CameraScreen: React.FC = () => {
         onToggleFullscreen={toggleFullscreen}
       />
 
+      {/* Compact tracing modes stay above the preview, close to the header. */}
+      <QuickControls
+        torchSupported={torchSupported}
+        torchEnabled={torchEnabled}
+        torchBusy={torchBusy}
+        onToggleTorch={toggleTorch}
+        stabilizerSupported={stabilizerSupported}
+        stabilizerEnabled={stabilizerEnabled}
+        stabilizerBusy={stabilizerBusy}
+        onToggleStabilizer={toggleStabilizer}
+      />
+
       {/* Camera viewport */}
       <div
         ref={containerRef}
-        className="relative flex-1 overflow-hidden"
+        className="relative min-h-0 flex-1 overflow-hidden"
         style={{ background: '#000' }}
       >
         {/* Loading */}

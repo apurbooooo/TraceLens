@@ -78,6 +78,50 @@ video {
   transform: translateZ(0);
 }
 
+/* Compact quick controls keep the camera preview as the dominant area. */
+.quick-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px calc(env(safe-area-inset-right, 0px) + 12px) 5px
+    calc(env(safe-area-inset-left, 0px) + 12px);
+  background: rgba(10, 10, 10, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.quick-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+@media (max-width: 360px) {
+  .quick-controls {
+    gap: 3px;
+    padding-right: calc(env(safe-area-inset-right, 0px) + 8px);
+    padding-left: calc(env(safe-area-inset-left, 0px) + 8px);
+  }
+
+  .quick-control {
+    gap: 3px;
+    padding-right: 4px;
+    padding-left: 4px;
+    font-size: 10px;
+  }
+}
+
 /* ─── Scrollable areas (panels, lists) ──────────── */
 
 .scrollable {

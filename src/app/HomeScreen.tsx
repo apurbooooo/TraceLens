@@ -5,10 +5,12 @@ import { useImageUpload } from '../features/image/useImageUpload';
 import type { UploadedImage } from '../types';
 import { DEFAULT_TRANSFORM } from '../types';
 import { isCameraSupported } from '../features/camera/cameraUtils';
+import { releaseSketchImage } from '../features/image-processing/useSketchImage';
 
 /** Revoke displayUrl of a previous image to free object URL memory */
 function revokeUploadedImage(image: UploadedImage): void {
   URL.revokeObjectURL(image.displayUrl);
+  releaseSketchImage(image.id);
 }
 
 /**

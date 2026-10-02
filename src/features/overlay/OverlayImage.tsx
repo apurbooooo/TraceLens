@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { useAppStore } from '../../app/store';
 import { useGestures } from '../gestures/useGestures';
 import { buildCssFilter, buildCssTransform } from '../../lib/imageUtils';
+import { useSketchImage } from '../image-processing/useSketchImage';
 
 /**
  * OverlayImage — reference image composited over the camera feed.
@@ -23,14 +24,21 @@ export const OverlayImage: React.FC = memo(() => {
   const transform = useAppStore((s) => s.transform);
   const adjustments = useAppStore((s) => s.adjustments);
   const isLocked = useAppStore((s) => s.isLocked);
+  const referenceMode = useAppStore((s) => s.referenceMode);
+  const { sketchUrl, sketchStatus } = useSketchImage(uploadedImage, referenceMode === 'sketch');
 
   const { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel } = useGestures();
 
   if (!uploadedImage) return null;
 
   const cssTransform = buildCssTransform(transform);
-  const cssFilter = buildCssFilter(adjustments);
+  const usingSketch = referenceMode === 'sketch' && !!sketchUrl;
+  const cssFilter = buildCssFilter(
+    adjustments,
+    referenceMode === 'bw' || (referenceMode === 'sketch' && !sketchUrl)
+  );
   const opacity = adjustments.opacity / 100;
+  const displayUrl = usingSketch && sketchUrl ? sketchUrl : uploadedImage.displayUrl;
 
   return (
     <div
@@ -38,6 +46,12 @@ export const OverlayImage: React.FC = memo(() => {
       aria-hidden="true"
       style={{ pointerEvents: 'none' }}
     >
+      <span className="sr-only" role="status" aria-live="polite">
+        {referenceMode === 'sketch' && sketchStatus === 'processing' ? 'Preparing reference sketch.' : ''}
+        {referenceMode === 'sketch' && sketchStatus === 'error'
+          ? 'Sketch mode is unavailable. The original reference image is still visible.'
+          : ''}
+      </span>
       {/* Gesture capture layer — full-screen, above the image */}
       <div
         className="absolute inset-0"
@@ -60,7 +74,7 @@ export const OverlayImage: React.FC = memo(() => {
         - pointer-events: none — gestures are captured by the div above
       */}
       <img
-        src={uploadedImage.displayUrl}
+        src={displayUrl}
         alt="Tracing reference"
         draggable={false}
         style={{
@@ -71,6 +85,7 @@ export const OverlayImage: React.FC = memo(() => {
           opacity,
           transform: cssTransform,
           filter: cssFilter,
+          transition: 'filter 160ms ease',
           willChange: 'transform, opacity, filter',
           transformOrigin: 'center center',
           userSelect: 'none',

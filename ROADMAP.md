@@ -29,6 +29,7 @@ File → HTMLImage (decode dimensions only)
 ```
 
 `displayUrl` is what `<img>` renders. `displayWidth × displayHeight` are the ground-truth dimensions for fit calculations.
+Sketch mode creates a second, local cached image from this reference URL. It is never applied to the live camera feed.
 
 ---
 
@@ -66,15 +67,25 @@ File → HTMLImage (decode dimensions only)
 - [x] Screen Wake Lock + visibility re-acquire + unmount cleanup
 - [x] Fullscreen API
 
-### 📋 PHASE 2 — Image Processing
-- [ ] B&W / Grayscale mode toggle (CSS 100% grayscale shortcut)
+### ✅ PHASE 2A — Tracing Controls (implemented)
+- [x] B&W reference toggle (CSS grayscale; camera frames are untouched)
+- [x] Local pencil-style Sketch generated from the uploaded reference and cached
+- [x] Chunked sketch pixel work with a Canvas 2D edge fallback
+- [x] Rear-camera flashlight using the active track's reported torch capability
+- [x] Best-effort Stabilizer control when the active camera track reports an applicable capability
+- [x] Toolbar controls for B&W, Sketch, Flashlight, and Steady view
+
+The sketch output preserves source aspect ratio, opacity, and transform. Re-toggling Sketch reuses its cached object URL. The uploaded display image remains unchanged.
+
+Stabilizer support is browser/device dependent. TraceLens applies a stabilization constraint only when the active track explicitly reports one; it does not claim that web code universally enables physical optical or electronic camera stabilization. No per-frame computer vision is used.
+
+### 📋 PHASE 2B — Additional Image Processing
 - [ ] Ghost mode preset (opacity ~20%, high contrast)
 - [ ] High Contrast mode (CSS filter shortcut)
-- [ ] Outline / edge detection — requires canvas + Web Worker
-- [ ] Threshold slider — requires canvas processing
-- [ ] Sharpness control — requires canvas convolution
-- [ ] Cached processed ImageBitmap for expensive modes
-- [ ] Processing at reduced resolution for performance
+- [ ] Additional outline / edge-detection modes
+- [ ] Threshold slider
+- [ ] Sharpness control
+- [ ] Web Worker pipeline if later processing requires it
 
 ### 📋 PHASE 3 — Performance
 - [ ] OffscreenCanvas + Web Worker rendering pipeline
@@ -133,6 +144,6 @@ File → HTMLImage (decode dimensions only)
 ```bash
 npm run build
 # Expected: 0 TypeScript errors
-# Expected: ~259KB JS / ~20KB CSS
+# Current output: 273.04KB JS / 20.55KB CSS (before gzip)
 # Expected: PWA service worker generated
 ```

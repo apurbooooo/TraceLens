@@ -8,13 +8,14 @@ import type { ImageAdjustments, Transform } from '../types';
  * Fast path: pure CSS filter, no canvas, no worker.
  * All Phase 1 adjustments are handled here.
  */
-export function buildCssFilter(adj: ImageAdjustments): string {
+export function buildCssFilter(adj: ImageAdjustments, forceGrayscale = false): string {
   const parts: string[] = [];
 
   if (adj.brightness !== 100) parts.push(`brightness(${adj.brightness}%)`);
   if (adj.contrast !== 100) parts.push(`contrast(${adj.contrast}%)`);
   if (adj.saturation !== 100) parts.push(`saturate(${adj.saturation}%)`);
-  if (adj.grayscale > 0) parts.push(`grayscale(${adj.grayscale}%)`);
+  const grayscale = forceGrayscale ? 100 : adj.grayscale;
+  if (grayscale > 0) parts.push(`grayscale(${grayscale}%)`);
   if (adj.invert > 0) parts.push(`invert(${adj.invert}%)`);
   if (adj.blur > 0) parts.push(`blur(${adj.blur}px)`);
 

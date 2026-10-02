@@ -65,6 +65,8 @@ export interface UploadedImage {
 
 export type CameraFacing = 'environment' | 'user';
 
+export type ReferenceMode = 'normal' | 'bw' | 'sketch';
+
 export type CameraStatus =
   | 'idle'
   | 'requesting'
@@ -84,7 +86,7 @@ export type AppScreen = 'home' | 'camera';
 // PerformanceMode: Phase 3 — adaptive FPS / quality scaling, not yet implemented
 export type PerformanceMode = 'battery' | 'balanced' | 'quality';
 
-// TracingMode: Phase 2 — canvas-based processing modes, not yet implemented
-// Kept as type for future use
-export type TracingMode = 'photo'; // Phase 2 will add: 'ghost' | 'bw' | 'outline' | 'edge' | 'highcontrast'
+// TracingMode remains a future preset type; reference appearance modes are
+// represented by ReferenceMode so they stay independent from image adjustments.
+export type TracingMode = 'photo';
 

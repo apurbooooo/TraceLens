@@ -6,14 +6,15 @@ import type {
   CameraFacing,
   CameraStatus,
   ImageAdjustments,
+  ReferenceMode,
   Transform,
   UploadedImage,
 } from '../types';
 import { DEFAULT_ADJUSTMENTS, DEFAULT_TRANSFORM } from '../types';
 
 // ─── App Store ─────────────────────────────────────────────────────────────
-// Only Phase 1 features are in this store. Phase 2/3 state is added
-// when those features are actually implemented.
+// Shared app and reference-image state lives here. Camera feature state stays
+// local to useCamera because it belongs to one active MediaStreamTrack.
 
 interface AppState {
   // Navigation
@@ -30,6 +31,8 @@ interface AppState {
   // Uploaded image (null = no image loaded)
   uploadedImage: UploadedImage | null;
   setUploadedImage: (image: UploadedImage | null) => void;
+  referenceMode: ReferenceMode;
+  setReferenceMode: (mode: ReferenceMode) => void;
   initialFitImageId: string | null;
   markInitialFitImage: (imageId: string) => void;
 
@@ -73,8 +76,11 @@ export const useAppStore = create<AppState>()(
 
     // ─── Image ──────────────────────────────────────────────────────────
     uploadedImage: null,
+    referenceMode: 'normal',
     initialFitImageId: null,
-    setUploadedImage: (image) => set({ uploadedImage: image, initialFitImageId: null }),
+    setUploadedImage: (image) =>
+      set({ uploadedImage: image, initialFitImageId: null, referenceMode: 'normal' }),
+    setReferenceMode: (mode) => set({ referenceMode: mode }),
     markInitialFitImage: (imageId) => set({ initialFitImageId: imageId }),
 
     // ─── Transform ──────────────────────────────────────────────────────
