@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#1d4ed8"/>
+  <!-- Outer lens ring -->
+  <circle cx="256" cy="256" r="160" stroke="white" stroke-width="18" fill="none" opacity="0.9"/>
+  <!-- Middle ring -->
+  <circle cx="256" cy="256" r="100" stroke="white" stroke-width="10" fill="none" opacity="0.5"/>
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="36" fill="white"/>
+  <!-- Cross hairs -->
+  <line x1="256" y1="72" x2="256" y2="130" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  <line x1="256" y1="382" x2="256" y2="440" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  <line x1="72" y1="256" x2="130" y2="256" stroke="white" stroke-width="18" stroke-linecap="round"/>
+  <line x1="382" y1="256" x2="440" y2="256" stroke="white" stroke-width="18" stroke-linecap="round"/>
+</svg>
