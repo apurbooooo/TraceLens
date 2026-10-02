@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Camera, ImagePlus, Aperture } from 'lucide-react';
+import { Camera, ImagePlus, Aperture, Mail } from 'lucide-react';
 import { useAppStore } from './store';
 import { useImageUpload } from '../features/image/useImageUpload';
 import type { UploadedImage } from '../types';
@@ -180,9 +180,33 @@ export const HomeScreen: React.FC = () => {
           </button>
         )}
 
-        <p className="text-center text-xs" style={{ color: 'rgba(240,240,240,0.25)' }}>
-          Images stay on your device. Nothing is uploaded.
-        </p>
+        <div className="flex flex-col gap-4 mt-2">
+          <p className="text-center text-xs" style={{ color: 'rgba(240,240,240,0.25)' }}>
+            Images stay on your device. Nothing is uploaded.
+          </p>
+
+          <div 
+            className="flex flex-col items-center gap-3 pt-4 w-full" 
+            style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+          >
+            <p className="text-center text-xs leading-relaxed" style={{ color: 'rgba(240,240,240,0.35)' }}>
+              Built by Apurbo<br/>
+              Undergraduate CSE student from Bangladesh
+            </p>
+            
+            <div className="text-center text-xs leading-relaxed" style={{ color: 'rgba(240,240,240,0.35)' }}>
+              Found a bug or something not working?<br/>
+              <a
+                href="mailto:anxapurbo@gmail.com?subject=TraceLens%20Bug%20Report&body=Hi%20Apurbo,%0A%0AI%20found%20a%20bug%20in%20TraceLens.%0A%0ADevice:%0ABrowser:%0AWhat%20happened:%0ASteps%20to%20reproduce:%0A%0A"
+                className="inline-flex items-center justify-center gap-1.5 transition-opacity active:opacity-70 mt-1"
+                style={{ color: '#3b82f6', textDecoration: 'none' }}
+              >
+                <Mail size={14} />
+                Email me at anxapurbo@gmail.com
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
