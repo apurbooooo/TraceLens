@@ -8,7 +8,9 @@ import {
   isCameraError,
   parseCameraError,
   startCamera,
+  startDigitalStabilization,
   stopCamera,
+  supportsDigitalStabilization,
   supportsTorch,
   type StabilizationControl,
 } from './cameraUtils';
@@ -24,6 +26,10 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const stabilizerEnabledRef = useRef(false);
   const stabilizerBusyRef = useRef(false);
   const stabilizationControlRef = useRef<StabilizationControl | null>(null);
+  const stabilizerModeRef = useRef<'native' | 'digital' | null>(null);
+  const digitalStabilizationCleanupRef = useRef<(() => void) | null>(null);
+  const stabilizerAttemptRef = useRef<AbortController | null>(null);
+  const stabilizerOperationRef = useRef(0);
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [torchBusy, setTorchBusy] = useState(false);
@@ -34,30 +40,43 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
   const cameraFacing = useAppStore((state) => state.cameraFacing);
   const setCameraStatus = useAppStore((state) => state.setCameraStatus);
 
+  const turnStabilizerOff = useCallback(() => {
+    const activeTrack = streamRef.current?.getVideoTracks()[0];
+    const wasNative = stabilizerModeRef.current === 'native';
+    stabilizerOperationRef.current += 1;
+    stabilizerAttemptRef.current?.abort();
+    stabilizerAttemptRef.current = null;
+    digitalStabilizationCleanupRef.current?.();
+    digitalStabilizationCleanupRef.current = null;
+    if (videoRef.current) videoRef.current.style.transform = '';
+    if (activeTrack && wasNative && stabilizationControlRef.current) {
+      void applyStabilization(activeTrack, stabilizationControlRef.current, false).catch(() => {});
+    }
+    stabilizerModeRef.current = null;
+    stabilizerEnabledRef.current = false;
+    stabilizerBusyRef.current = false;
+    setStabilizerEnabled(false);
+    setStabilizerBusy(false);
+  }, [videoRef]);
+
   const stopCurrentStream = useCallback(() => {
     const activeTrack = streamRef.current?.getVideoTracks()[0];
     if (activeTrack && torchEnabledRef.current) {
       void applyTorch(activeTrack, false).catch(() => {});
     }
-    if (activeTrack && stabilizerEnabledRef.current && stabilizationControlRef.current) {
-      void applyStabilization(activeTrack, stabilizationControlRef.current, false).catch(() => {});
-    }
+    turnStabilizerOff();
     torchEnabledRef.current = false;
     torchBusyRef.current = false;
-    stabilizerEnabledRef.current = false;
-    stabilizerBusyRef.current = false;
     stabilizationControlRef.current = null;
     setTorchSupported(false);
     setTorchEnabled(false);
     setTorchBusy(false);
     setStabilizerSupported(false);
-    setStabilizerEnabled(false);
-    setStabilizerBusy(false);
     removeTrackListenersRef.current?.();
     removeTrackListenersRef.current = null;
     stopCamera(streamRef.current, videoRef.current);
     streamRef.current = null;
-  }, [videoRef]);
+  }, [turnStabilizerOff, videoRef]);
 
   const stopStream = useCallback(() => {
     requestIdRef.current += 1;
@@ -96,7 +115,9 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
       setTorchSupported(hasTorch);
       setTorchEnabled(false);
       torchEnabledRef.current = false;
-      setStabilizerSupported(stabilizationControlRef.current !== null);
+      setStabilizerSupported(
+        stabilizationControlRef.current !== null || supportsDigitalStabilization()
+      );
       setStabilizerEnabled(false);
       stabilizerEnabledRef.current = false;
       const onTrackEnded = () => {
@@ -156,29 +177,84 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
 
   const toggleStabilizer = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
+    const video = videoRef.current;
     const control = stabilizationControlRef.current;
-    if (!track || !control || !stabilizerSupported || stabilizerBusyRef.current) return;
+    if (!track || !video || !stabilizerSupported || stabilizerBusyRef.current) return;
 
     const nextEnabled = !stabilizerEnabledRef.current;
+    const operation = ++stabilizerOperationRef.current;
     stabilizerBusyRef.current = true;
     setStabilizerBusy(true);
+
+    const isCurrentOperation = () =>
+      stabilizerOperationRef.current === operation &&
+      streamRef.current?.getVideoTracks()[0] === track;
+
     try {
-      await applyStabilization(track, control, nextEnabled);
-      if (streamRef.current?.getVideoTracks()[0] === track) {
-        stabilizerEnabledRef.current = nextEnabled;
-        setStabilizerEnabled(nextEnabled);
+      if (!nextEnabled) {
+        if (stabilizerModeRef.current === 'native' && control) {
+          try {
+            await applyStabilization(track, control, false);
+          } catch {
+            if (isCurrentOperation()) setStabilizerSupported(false);
+          }
+        }
+        if (!isCurrentOperation()) return;
+        digitalStabilizationCleanupRef.current?.();
+        digitalStabilizationCleanupRef.current = null;
+        if (videoRef.current) videoRef.current.style.transform = '';
+        stabilizerModeRef.current = null;
+        stabilizerEnabledRef.current = false;
+        setStabilizerEnabled(false);
+        return;
       }
-    } catch {
-      if (streamRef.current?.getVideoTracks()[0] === track) {
+
+      if (control) {
+        try {
+          await applyStabilization(track, control, true);
+          if (!isCurrentOperation()) {
+            void applyStabilization(track, control, false).catch(() => {});
+            return;
+          }
+          stabilizerModeRef.current = 'native';
+          stabilizerEnabledRef.current = true;
+          setStabilizerEnabled(true);
+          return;
+        } catch {
+          // A reported control can still reject applyConstraints. Try motion fallback.
+          void applyStabilization(track, control, false).catch(() => {});
+        }
+      }
+
+      const attempt = new AbortController();
+      stabilizerAttemptRef.current = attempt;
+      const cleanup = await startDigitalStabilization(video, attempt.signal);
+      if (!isCurrentOperation() || attempt.signal.aborted) {
+        cleanup();
+        return;
+      }
+      stabilizerAttemptRef.current = null;
+      digitalStabilizationCleanupRef.current = cleanup;
+      stabilizerModeRef.current = 'digital';
+      stabilizerEnabledRef.current = true;
+      setStabilizerEnabled(true);
+    } catch (error) {
+      if (isCurrentOperation() && !(error instanceof DOMException && error.name === 'AbortError')) {
+        digitalStabilizationCleanupRef.current?.();
+        digitalStabilizationCleanupRef.current = null;
+        stabilizerModeRef.current = null;
         stabilizerEnabledRef.current = false;
         setStabilizerEnabled(false);
         setStabilizerSupported(false);
       }
     } finally {
-      stabilizerBusyRef.current = false;
-      setStabilizerBusy(false);
+      if (stabilizerOperationRef.current === operation) {
+        stabilizerAttemptRef.current = null;
+        stabilizerBusyRef.current = false;
+        setStabilizerBusy(false);
+      }
     }
-  }, [stabilizerSupported]);
+  }, [stabilizerSupported, videoRef]);
 
   const turnTorchOff = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -215,6 +291,7 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         void turnTorchOff();
+        turnStabilizerOff();
         streamRef.current?.getVideoTracks().forEach((track) => {
           if (track.readyState === 'live') track.enabled = false;
         });
@@ -234,7 +311,7 @@ export function useCamera(videoRef: React.RefObject<HTMLVideoElement | null>) {
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [setCameraStatus, startStream, turnTorchOff]);
+  }, [setCameraStatus, startStream, turnStabilizerOff, turnTorchOff]);
 
   return {
     restart: startStream,

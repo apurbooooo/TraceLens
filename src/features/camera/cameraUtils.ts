@@ -229,6 +229,204 @@ export async function applyStabilization(
   await track.applyConstraints({ advanced });
 }
 
+/** Returns true when a device orientation or motion event API is exposed. */
+export function supportsDigitalStabilization(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    'DeviceOrientationEvent' in window ||
+    'DeviceMotionEvent' in window ||
+    'ondeviceorientation' in window ||
+    'ondevicemotion' in window
+  );
+}
+
+/**
+ * Apply a conservative, low-pass preview transform from device orientation.
+ * The transform is written only to the camera video element. It does not read
+ * or process camera frames, and the caller owns the returned cleanup function.
+ */
+export async function startDigitalStabilization(
+  video: HTMLVideoElement,
+  signal: AbortSignal
+): Promise<() => void> {
+  if (typeof window === 'undefined') throw new Error('Device motion is unavailable.');
+
+  type PermissionEventConstructor = {
+    requestPermission?: () => Promise<string>;
+  };
+  type MotionWindow = Window & {
+    DeviceOrientationEvent?: PermissionEventConstructor;
+    DeviceMotionEvent?: PermissionEventConstructor;
+  };
+
+  const motionWindow = window as MotionWindow;
+  const orientationAvailable =
+    typeof motionWindow.DeviceOrientationEvent === 'function' || 'ondeviceorientation' in window;
+  const motionAvailable =
+    typeof motionWindow.DeviceMotionEvent === 'function' || 'ondevicemotion' in window;
+  const eventType = orientationAvailable
+    ? 'deviceorientation'
+    : motionAvailable
+      ? 'devicemotion'
+      : null;
+
+  if (!eventType) throw new Error('Device motion is unavailable.');
+
+  // iOS requires this request to be made directly from the user's button tap.
+  const orientationConstructor = motionWindow.DeviceOrientationEvent;
+  const motionConstructor = motionWindow.DeviceMotionEvent;
+  const permissionConstructor = orientationConstructor?.requestPermission
+    ? orientationConstructor
+    : motionConstructor?.requestPermission
+      ? motionConstructor
+      : undefined;
+  if (permissionConstructor?.requestPermission) {
+    const permission = await permissionConstructor.requestPermission();
+    if (permission !== 'granted') throw new Error('Device motion permission was denied.');
+  }
+  if (signal.aborted) throw new DOMException('Stabilization was cancelled.', 'AbortError');
+
+  const cropScale = 1.06;
+  const maxOffset = 12;
+  const smoothing = 0.18;
+  const maxSensorWaitMs = 1600;
+  let baselineBeta: number | null = null;
+  let baselineGamma: number | null = null;
+  let integratedBeta = 0;
+  let integratedGamma = 0;
+  let previousMotionTime: number | null = null;
+  let targetX = 0;
+  let targetY = 0;
+  let currentX = 0;
+  let currentY = 0;
+  let frameId: number | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let abortListener: (() => void) | null = null;
+  let markSensorReady = () => {};
+  let cleanedUp = false;
+
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (eventType === 'deviceorientation') {
+      window.removeEventListener('deviceorientation', onOrientation);
+    } else {
+      window.removeEventListener('devicemotion', onMotion);
+    }
+    if (abortListener) signal.removeEventListener('abort', abortListener);
+    abortListener = null;
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    if (frameId !== null) cancelAnimationFrame(frameId);
+    frameId = null;
+    video.style.transform = '';
+  };
+
+  const render = () => {
+    frameId = null;
+    currentX += (targetX - currentX) * smoothing;
+    currentY += (targetY - currentY) * smoothing;
+    video.style.transform =
+      `translate3d(${currentX.toFixed(2)}px, ${currentY.toFixed(2)}px, 0) scale(${cropScale})`;
+    if (Math.abs(targetX - currentX) > 0.08 || Math.abs(targetY - currentY) > 0.08) {
+      frameId = requestAnimationFrame(render);
+    }
+  };
+
+  const scheduleRender = () => {
+    if (frameId === null) frameId = requestAnimationFrame(render);
+  };
+
+  const setTarget = (beta: number, gamma: number) => {
+    if (baselineBeta === null || baselineGamma === null) {
+      baselineBeta = beta;
+      baselineGamma = gamma;
+      scheduleRender();
+      return;
+    }
+
+    const betaDelta = shortestAngleDelta(baselineBeta, beta);
+    const gammaDelta = shortestAngleDelta(baselineGamma, gamma);
+    targetX = clamp(gammaDelta * 1.2, -maxOffset, maxOffset);
+    targetY = clamp(betaDelta * 1.2, -maxOffset, maxOffset);
+    scheduleRender();
+    markSensorReady();
+  };
+
+  const onOrientation = (event: DeviceOrientationEvent) => {
+    if (typeof event.beta !== 'number' || typeof event.gamma !== 'number') return;
+    if (!Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) return;
+    setTarget(event.beta, event.gamma);
+    markSensorReady();
+  };
+
+  const onMotion = (event: DeviceMotionEvent) => {
+    const rotationRate = event.rotationRate;
+    if (!rotationRate || typeof rotationRate.beta !== 'number' || typeof rotationRate.gamma !== 'number') {
+      return;
+    }
+
+    const now = performance.now();
+    const deltaSeconds = previousMotionTime === null
+      ? 0
+      : Math.min((now - previousMotionTime) / 1000, 0.05);
+    previousMotionTime = now;
+    integratedBeta += rotationRate.beta * deltaSeconds;
+    integratedGamma += rotationRate.gamma * deltaSeconds;
+    setTarget(integratedBeta, integratedGamma);
+    markSensorReady();
+  };
+
+  if (signal.aborted) {
+    cleanup();
+    throw new DOMException('Stabilization was cancelled.', 'AbortError');
+  }
+
+  if (eventType === 'deviceorientation') {
+    window.addEventListener('deviceorientation', onOrientation);
+  } else {
+    window.addEventListener('devicemotion', onMotion);
+  }
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onSensorReady = () => {
+        if (cleanedUp) return;
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        timeoutId = null;
+        if (abortListener) signal.removeEventListener('abort', abortListener);
+        abortListener = null;
+        markSensorReady = () => {};
+        resolve();
+      };
+      const onAbort = () => {
+        cleanup();
+        reject(new DOMException('Stabilization was cancelled.', 'AbortError'));
+      };
+
+      markSensorReady = onSensorReady;
+      abortListener = onAbort;
+      signal.addEventListener('abort', onAbort, { once: true });
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Device motion did not respond.'));
+      }, maxSensorWaitMs);
+    });
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+
+  return cleanup;
+}
+
+function shortestAngleDelta(origin: number, current: number): number {
+  return ((current - origin + 540) % 360) - 180;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
 function getTrackCapabilities(track: MediaStreamTrack | null): Record<string, unknown> | null {
   if (!track || typeof track.getCapabilities !== 'function') return null;
   try {

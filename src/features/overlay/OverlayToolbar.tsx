@@ -54,9 +54,11 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
   const flashlightUnavailableTitle = cameraFacing === 'user'
     ? 'Flashlight is available only on the rear camera when its torch is supported.'
     : 'Flashlight not supported on this device/browser.';
-  const stabilizerTitle = stabilizerSupported
-    ? (stabilizerEnabled ? 'Turn stabilizer off' : 'Turn stabilizer on')
-    : 'Stabilizer not supported on this device/browser camera.';
+  const stabilizerTitle = !stabilizerSupported
+    ? 'Steady unavailable: camera stabilization and usable device motion are unavailable or permission was denied.'
+    : stabilizerEnabled
+      ? 'Best-effort camera stabilization is on. Tap to turn it off.'
+      : 'Best-effort camera stabilization. Uses an exposed camera control or device motion when available.';
 
   const handleToggleBlackAndWhite = useCallback(() => {
     setReferenceMode(referenceMode === 'bw' ? 'normal' : 'bw');
@@ -103,9 +105,9 @@ export const QuickControls: React.FC<QuickControlsProps> = ({
         icon={<Focus size={16} />}
         label="Steady"
         accessibleLabel={
-          stabilizerSupported
-            ? stabilizerEnabled ? 'Turn stabilizer off' : 'Turn stabilizer on'
-            : 'Stabilizer not supported on this device/browser'
+          !stabilizerSupported
+            ? 'Steady unavailable'
+            : stabilizerEnabled ? 'Steady on, turn off' : 'Steady off, turn on'
         }
         active={stabilizerEnabled}
         disabled={!stabilizerSupported || stabilizerBusy}
